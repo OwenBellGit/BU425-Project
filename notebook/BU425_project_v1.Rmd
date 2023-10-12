@@ -1,1 +1,155 @@
+---
+title: "BU425_project_v1"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# import libraries
+library(ggplot2)
+library(dplyr)
+library(corrplot)
+```
+
+## R Markdown
+
+# Telecom Churn Data
+
+Business Problem:
+Analytic Problem:
+Goal:
+
+## Load and Describe Data
+
+The data was found off of Kaggle (https://www.kaggle.com/datasets/yeanzc/telco-customer-churn-ibm-dataset/data) for a hypothetical telecom company with data from IBM 
+
+```{r}
+#import data
+initial_data<- read.csv("Telco_customer_churn.csv")
+head(initial_data)
+```
+```{r}
+# Look at the makeup of the data
+str(initial_data)
+# 7043 rows and 33 columns 
+# target variable: Churn Label / Churn Value
+```
+
+
+```{r}
+# count the target variable
+initial_data %>%
+  group_by(Churn.Value) %>%
+  summarise(count = n())
+```
+```{r}
+# find the distribution of the target variable
+mean(initial_data$Churn.Value)
+# about 27% of our customers leave (churn = 1)
+```
+
+## Dealing with Missing Values
+
+```{r}
+# check for missing values
+colSums(is.na(initial_data))
+#can see that total charges has 11 observations missing
+```
+
+```{r}
+# shows the rows in which total charges is NA
+missing_val<- initial_data[is.na(initial_data$Total.Charges),]
+missing_val
+# these missing values are when churn = 0 so they are staying with the company
+```
+
+```{r}
+# dropping the NA values, would not contribute much in our findings as we have about 73% of the data that is not churn (churn = 0)
+data<- na.omit(initial_data)
+colSums(is.na(data))
+```
+
+## Exploratory Data Analysis
+
+```{r}
+# changing the value of the variables to do some analysis on
+# data$Churn.Value<- as.factor(data$Churn.Value)
+# data$Gender[data$Gender=="Male"]<- 0
+# data$Gender[data$Gender=="Female"]<- 1
+# str(data)
+```
+
+
+```{r}
+# distribution of target variable -> maybe do a pie chart instead?
+data%>%
+  ggplot(aes(x = Churn.Label, fill = Churn.Label))+
+  geom_bar(aes(y = after_stat(count)/sum(after_stat(count))))+
+  ylab("Proportion")+
+  xlab("Churn Value")+
+  ggtitle("Distribution of Churn Rate")+
+  theme(plot.title = element_text(hjust = 0.5))+ # centers the title
+  scale_fill_brewer(palette = "Set2")
+
+```
+
+```{r}
+# distribution by gender for the churn Label
+data %>%
+  ggplot(aes(x = Gender, fill = Churn.Label))+
+  geom_bar(position = "dodge")+
+  ggtitle("Counts of Churn Rate based of Gender")+
+  theme(plot.title = element_text(hjust = 0.5))+ # centers the title
+  scale_fill_brewer(palette = "Set2")
+data %>%
+  group_by(Churn.Label,Gender) %>%
+  summarize(count = n())
+
+# Based on these results there are no real differences based on gender whether the customer leaves or not
+```
+
+```{r}
+# distribution by senior for churn rate
+data %>%
+  ggplot(aes(x = Senior.Citizen, fill = Churn.Label))+
+  geom_bar(position = "dodge")+
+  ggtitle("Counts of Churn Rate based off whether customer is a Senior Citizen")+
+  theme(plot.title = element_text(hjust = 0.5))+ # centers the title
+  scale_fill_brewer(palette = "Set2")
+data %>%
+  group_by(Churn.Label,Senior.Citizen) %>%
+  summarize(count = n())
+# There are more customers <65+ (senior age... double check) in this distribution that leave the company than those that stay
+```
+
+
+```{r}
+# distribution of contract type (month-to-month, one year, two year)
+data %>%
+  ggplot(aes(x = Contract, fill = Churn.Label))+
+  geom_bar(position = "dodge")+
+  ggtitle("Counts of Churn Rate based off Contract type")+
+  theme(plot.title = element_text(hjust = 0.5))+ # centers the title
+  scale_fill_brewer(palette = "Set2")
+data %>%
+  group_by(Churn.Label,Contract) %>%
+  summarize(count = n())
+
+# this distribution shows that there are more people leaving the company with a contract that is month-to month vs those that are fixed for one or two years. This makes sense because they are paying buy however many months they want the service for.
+```
+
+```{r}
+# reason for leaving
+# services provided (using dummy variables)
+```
+
+After doing some exploratory data analysis we realized some columns were not providing us additional information. 
+
+```{r}
+# need to drop specific columns 
+# (do we need both churn value and churn label?), lat long (we have the latitude and longitude separated) , state (all California)
+```
 
