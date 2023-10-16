@@ -11,7 +11,6 @@ knitr::opts_chunk$set(echo = TRUE)
 # import libraries
 library(ggplot2)
 library(dplyr)
-library(corrplot)
 ```
 
 ## R Markdown
@@ -43,12 +42,9 @@ str(initial_data)
 # count the target variable
 initial_data %>%
   group_by(Churn.Value) %>%
-  summarise(count = n())
-```
-```{r}
-# find the distribution of the target variable
-mean(initial_data$Churn.Value)
-# about 27% of our customers leave (churn = 1)
+  summarise(count = n(), 
+            percentage = paste0(round(count/nrow(initial_data)*100,0),"%"),
+            .groups="drop")
 ```
 
 ## Dealing with Missing Values
@@ -85,7 +81,7 @@ colSums(is.na(data))
 
 ```{r}
 # distribution of target variable -> maybe do a pie chart instead?
-data%>%
+data %>% 
   ggplot(aes(x = Churn.Label, fill = Churn.Label))+
   geom_bar(aes(y = after_stat(count)/sum(after_stat(count))))+
   ylab("Proportion")+
@@ -95,61 +91,166 @@ data%>%
   scale_fill_brewer(palette = "Set2")
 
 ```
-
 ```{r}
-# distribution by gender for the churn Label
-data %>%
-  ggplot(aes(x = Gender, fill = Churn.Label))+
-  geom_bar(position = "dodge")+
-  ggtitle("Counts of Churn Rate based of Gender")+
+data %>% 
+  group_by(Gender, Churn.Label) %>% 
+  summarise(count = n(),
+            .groups = "drop") %>% 
+  mutate(prop = paste0(round(count/sum(count)*100, 0), '%')) %>% 
+  ggplot(aes(x = Gender, y = count, fill = Churn.Label)) +
+  geom_col(position = "stack") +
+ # geom_text(aes(label = prop), vjust = 1, size = 3) +
+  ggtitle("Counts of Churn Rate by Gender")+
   theme(plot.title = element_text(hjust = 0.5))+ # centers the title
   scale_fill_brewer(palette = "Set2")
-data %>%
-  group_by(Churn.Label,Gender) %>%
-  summarize(count = n())
 
-# Based on these results there are no real differences based on gender whether the customer leaves or not
+# There are similar numbers of customers by gender, with each having similar proportions that leave versus remaining with the company
 ```
 
 ```{r}
 # distribution by senior for churn rate
-data %>%
-  ggplot(aes(x = Senior.Citizen, fill = Churn.Label))+
-  geom_bar(position = "dodge")+
-  ggtitle("Counts of Churn Rate based off whether customer is a Senior Citizen")+
+data %>% 
+  group_by(Senior.Citizen, Churn.Label) %>% 
+  summarise(count = n(),
+            .groups = "drop") %>% 
+  mutate(prop = paste0(round(count/sum(count)*100, 0), '%')) %>% 
+  ggplot(aes(x = Senior.Citizen, y = count, fill = Churn.Label)) +
+  geom_col(position = "stack") +
+ # geom_text(aes(label = prop), vjust = 1, size = 3) +
+  ggtitle("Counts of Churn Rate by Senior Citizen category")+
   theme(plot.title = element_text(hjust = 0.5))+ # centers the title
   scale_fill_brewer(palette = "Set2")
-data %>%
-  group_by(Churn.Label,Senior.Citizen) %>%
-  summarize(count = n())
-# There are more customers <65+ (senior age... double check) in this distribution that leave the company than those that stay
+
+#The majority of customers are not senior citizens, but those that are have a higher likelihood to leave
 ```
 
 
 ```{r}
-# distribution of contract type (month-to-month, one year, two year)
-data %>%
-  ggplot(aes(x = Contract, fill = Churn.Label))+
-  geom_bar(position = "dodge")+
-  ggtitle("Counts of Churn Rate based off Contract type")+
+data %>% 
+  group_by(Contract, Churn.Label) %>% 
+  summarise(count = n(),
+            .groups = "drop") %>% 
+  mutate(prop = paste0(round(count/sum(count)*100, 0), '%')) %>% 
+  ggplot(aes(x = reorder(Contract, -count), y = count, fill = Churn.Label)) +
+  geom_col(position = "stack") +
+  #geom_text(aes(label = prop), vjust = 1, size = 3) +
+  ggtitle("Counts of Churn Rate by Type of Contract")+
   theme(plot.title = element_text(hjust = 0.5))+ # centers the title
-  scale_fill_brewer(palette = "Set2")
-data %>%
-  group_by(Churn.Label,Contract) %>%
-  summarize(count = n())
+  scale_fill_brewer(palette = "Set2")+
+  xlab("Type of Contract")
 
 # this distribution shows that there are more people leaving the company with a contract that is month-to month vs those that are fixed for one or two years. This makes sense because they are paying buy however many months they want the service for.
+```
+```{r}
+data %>% 
+  group_by(Internet.Service, Churn.Label) %>% 
+  summarise(count = n(),
+            .groups = "drop") %>% 
+  mutate(prop = paste0(round(count/sum(count)*100, 0), '%')) %>% 
+  ggplot(aes(x = reorder(Internet.Service, -count), y = count, fill = Churn.Label)) +
+  geom_col(position = "stack") +
+ # geom_text(aes(label = prop), vjust = 1, size = 3) +
+  ggtitle("Counts of Churn Rate by Internet Service") +
+  theme(plot.title = element_text(hjust = 0.5))+ # centers the title
+  scale_fill_brewer(palette = "Set2")+
+  xlab("Type of Internet Services")
+
+#Most customers have Fibre Optic internet services, but this category also has the largest proportion of customers that leave the company
+```
+
+
+```{r}
+data %>% 
+  group_by(Payment.Method, Churn.Label) %>% 
+  summarise(count = n(),
+            .groups = "drop") %>% 
+  mutate(prop = paste0(round(count/sum(count)*100, 0), '%')) %>% 
+  ggplot(aes(x = reorder(Payment.Method, count), y = count, fill = Churn.Label)) +
+  geom_col(position = "stack") +
+ # geom_text(aes(label = prop), vjust = 1, size = 3) +
+  ggtitle("Counts of Churn Rate by Payment Method")+
+  theme(plot.title = element_text(hjust = 0.5))+ # centers the title
+  scale_fill_brewer(palette = "Set2")+
+  xlab("Payment Method")+
+  coord_flip()
+
+
+# Based on these results the majority of customers choose to pay by electronic cheque. However, this also leads to higher likelihood of customer loss.
+```
+
+```{r}
+# plots for continuous variables
+
+data %>%
+  ggplot(aes(x = Tenure.Months, fill = Churn.Label))+
+  geom_histogram(bins = 30)+
+  ggtitle("Distribution of Tenure by Churn Label")+
+  theme(plot.title = element_text(hjust = 0.5))+ # centers the title
+  scale_fill_brewer(palette = "Set2")+
+  xlab("Tenure Months")
+
+# Customers who have been with the company for a shorter period of time are more likely to leave, with a median of 10 months.
+
+```
+```{r}
+data %>%
+  ggplot(aes(x = Total.Charges, y = Churn.Label, fill = Churn.Label))+
+  geom_boxplot()+
+  ggtitle("Distribution of Total Charges by Churn Label")+
+  theme(plot.title = element_text(hjust = 0.5))+ # centers the title
+  scale_fill_brewer(palette = "Set2")
+
+# Although there are more outliers, it appears that customers who left the company had a lower median total charge than those who remained with the company. This may indicate that cost alone may not be the motivating factor that causes customers to leave.
+
 ```
 
 ```{r}
 # reason for leaving
-# services provided (using dummy variables)
+
+data %>% 
+  filter(Churn.Value == 1) %>% 
+  group_by(Churn.Reason) %>% 
+  summarise(count = n(),
+           .groups = 'drop') %>% 
+  mutate(perc =paste0(round(count / sum(count)*100, 0),'%')) %>% 
+  arrange(desc(count))
+
+# About 10% of the customers who left, did so due to price or charges
 ```
+
 
 After doing some exploratory data analysis we realized some columns were not providing us additional information. 
 
 ```{r}
 # need to drop specific columns 
-# (do we need both churn value and churn label?), lat long (we have the latitude and longitude separated) , state (all California)
+# (do we need both churn value and churn label?), lat long (we have the latitude and longitude separated) , state (all California), Country (all in the United States)
+newdata<- select(data, -c(Lat.Long, State, Country, Churn.Value, Count, CLTV, Churn.Score))
+head(newdata)
+
+# data that won't be available for why they left (can't use for prediction) 
+```
+
+```{r}
+# rename the columns
+newdata %>%
+  rename(ZipCode = Zip.Code,
+         SeniorCitizen = Senior.Citizen,
+         TenureMonths = Tenure.Months,
+         PhoneService = Phone.Service,
+         MultipleLines = Multiple.Lines,
+         InternetService = Internet.Service,
+         OnlineSecurity = Online.Security,
+         OnlineBackup = Online.Backup,
+         DeviceProtection = Device.Protection,
+         TechSupport = Tech.Support,
+         StreamingTV = Streaming.TV,
+         StreamingMovies = Streaming.Movies,
+         PaperlessBilling = Paperless.Billing,
+         PaymentMethod = Payment.Method,
+         MonthlyCharges = Monthly.Charges,
+         TotalCharges = Total.Charges,
+         ChurnLabel = Churn.Label,
+         ChurnReason = Churn.Reason)
+
 ```
 
