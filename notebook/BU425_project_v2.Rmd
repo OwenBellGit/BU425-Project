@@ -222,12 +222,26 @@ data %>%
   arrange(desc(count))
 ```
 
+
+##Feature Engineering
+```{r}
+#Create a location variable from first 3 digits of zip code
+#California can be divided into North and South
+#Zip codes < 935** considered South, else considered North
+
+data <- data %>% 
+  mutate(Region = if_else(Zip.Code <= 93500, "South", "North"))
+       
+```
+
+
 After doing some exploratory data analysis we realized some columns were not providing us additional information. 
 
 ```{r}
 # need to drop specific columns 
 # (do we need both churn value and churn label?), lat long (we have the latitude and longitude separated) , state (all California), Country (all in the United States)
-newdata<- select(data, -c(Lat.Long, Count, CLTV, Churn.Score, Latitude, Longitude, Zip.Code,CustomerID,Churn.Reason, Churn.Label,City))
+newdata<- data %>% 
+  select(c(Gender: Total.Charges, Region, Churn.Label))
 head(newdata)
 
 # data that won't be available for why they left (can't use for prediction) 
@@ -235,72 +249,43 @@ head(newdata)
 
 ```{r}
 # rename the columns
-names(newdata) <- c("Gender", "SeniorCitizen",
+names(newdata) <- c("Gender", "Senior",
                     "Partner", "Dependents",
-                    "TenureMonths","PhoneService",
-                    "MultipleLines","InternetService",
-                    "OnlineSecurity","OnlineBackup",
-                    "DeviceProtection","TechSupport",
-                    "StreamingTV","StreamingMovies",
-                    "Contract", "PaperlessBilling",
-                    "PaymentMethod", "MonthlyCharges",
-                    "TotalCharges","ChurnLabel")
+                    "Tenure","PhoneSvc",
+                    "MultLines","InternetSvc",
+                    "OLSecurity","OLBackup",
+                    "DeviceProt","TechSupport",
+                    "StreamTV","StreamMovies",
+                    "Contract", "Paperless",
+                    "PayMethod", "MonthlyCharges",
+                    "TotalCharges","Region", "ChurnLabel")
 
 head(newdata)
 ```
 
 ```{r}
-# changing the value of the variables to do some analysis on
-# making dummy var
-newdata <- newdata%>%
-  mutate(Gender = factor(Gender, levels=(c("Male","Female"))),
-         SeniorCitizen = factor(SeniorCitizen, levels=(c("Yes","No"))),
-         Partner = factor(Partner, levels=(c("Yes","No"))),
-         Dependents = factor(Dependents, levels=(c("Yes","No"))),
-         PhoneService = factor(PhoneService, levels=(c("Yes","No"))),
-         OnlineSecurity = factor(OnlineSecurity, levels=(c("Yes","No"))),
-         OnlineBackup = factor(OnlineBackup, levels=(c("Yes","No"))),
-         DeviceProtection = factor(DeviceProtection, levels=(c("Yes","No"))),
-         TechSupport = factor(TechSupport, levels=(c("Yes","No"))),
-         StreamingTV = factor(StreamingTV, levels=(c("Yes","No"))),
-         StreamingMovies = factor(StreamingMovies, levels=(c("Yes","No"))),
-         PaperlessBilling = factor(PaperlessBilling, levels=(c("Yes","No"))),
-         ChurnLabel = factor(ChurnLabel, levels=(c("No","Yes"))))
+#Convert character fields to categorical variables
+newdata <- newdata %>% 
+  mutate(MultLines = if_else(PhoneSvc=="No", "No", MultLines),
+         OLSecurity = if_else(InternetSvc=="No", "No", OLSecurity),
+         OLBackup = if_else(InternetSvc=="No", "No", OLBackup),
+         DeviceProt = if_else(InternetSvc=="No", "No", DeviceProt),
+         TechSupport = if_else(InternetSvc=="No", "No", TechSupport),
+         StreamTV = if_else(InternetSvc=="No", "No", StreamTV),
+         StreamMovies = if_else(InternetSvc=="No", "No", StreamMovies))
 
-head(newdata)
-```
-```{r}
+#Convert character fields to categorical variables
+newdata <- newdata %>% 
+  mutate_if(~is.character(.),as.factor)
+
 str(newdata)
 ```
 
-
-```{r}
-# print("Gender")
-# contrasts(newdata$Gender)
-# print("Senior Citizen")
-# contrasts(newdata$SeniorCitizen)
-# print("Partner")
-# contrasts(newdata$Partner)
-# print("Dependents")
-# contrasts(newdata$Dependents)
-# print("Phone Service")
-# contrasts(newdata$PhoneService)
-# print("Online Security")
-# contrasts(newdata$OnlineSecurity)
-# print("Online Backup")
-# contrasts(newdata$OnlineBackup)
-# print("Device Protection")
-# contrasts(newdata$DeviceProtection)
-# print("Tech Support")
-# contrasts(newdata$TechSupport)
-# print("Streaming TV")
-# contrasts(newdata$StreamingTV)
-# print("Streaming Movies")
-# contrasts(newdata$StreamingMovies)
-# print("Paperless Billing")
-# contrasts(newdata$PaperlessBilling)
-print("Churn Label")
-contrasts(newdata$ChurnLabel)
+```{r, fig.width=12, fig.height=12}
+#heatmap
+model.matrix(~0+.,newdata) %>% 
+  cor(use="pairwise.complete.obs") %>% 
+  ggcorrplot(show.diag=FALSE, type="lower",lab=TRUE, lab_size=5)
 ```
 
 TP = Customer is leaving
@@ -311,6 +296,7 @@ We need to split our data into training and test sets. Using and 80/20 ratio of 
 
 One consideration we must make is the fact that the data we are working is skewed about 70/30 to customer staying versus leaving as mentioned previously. We will need to modify how we build these datasets to make sure they still accurately reflect the general environment. If we do not do this, we run the risk of either training data being skewed, leading to a highly inaccurate model, or the test set being skewed leading to inaccurate conclusions we can draw from our models
 ```{r}
+# scaling data
 
 ```
 
@@ -321,11 +307,6 @@ One consideration we must make is the fact that the data we are working is skewe
 
 ## 5. Build the models
 Due to the nature of Churn being one of two options either a customer stays or leaves we decided it fits best to use a classification model  
-```{r}
-# glm to see important features
-model1<- glm(Churn.Value~., family = binomial, data = newdata)
-summary(model1)
-```
 
 ### Logistic Regression
 Logistic Regression was chosen due to its high interpretability and simplicity. Using the predictors, the model will produce a probability between 0 and 1 and from there we can determine if the customer is closer to leaving (1) or staying (0). It is a model that we all have experience with and feel comfortable with using and explaining the results to management and other stakeholders of the telecom company.   The model is easy to improve on through regularization techniques such as Lasso and Ridge. 
