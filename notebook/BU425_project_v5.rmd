@@ -599,11 +599,11 @@ Due to of our models being classification models we plan to use the confusion ma
 
 #Logistic Regression
 print("Logistic Regression")
-getMetrics(getPreds(finalLR, "lr", test_data, 0.5), test_data$ChurnLabel)
+getMetrics(getPreds(finalLR, "lr", val_data, 0.5), val_data$ChurnLabel)
 
 #Random Forest
 print("Random Forest")
-getMetrics(getPreds(final_rf, "rf", test_data, 0.5), test_data$ChurnLabel)
+getMetrics(getPreds(final_rf, "rf", val_data, 0.5), val_data$ChurnLabel)
 ```
 
 
@@ -611,9 +611,9 @@ getMetrics(getPreds(final_rf, "rf", test_data, 0.5), test_data$ChurnLabel)
 ```{r}
 #ROC curve of random forest
 library(pROC)
-predictions_rf <- predict(final_rf, test_data, type = "prob")
-binary_target <- ifelse(test_data$ChurnLabel == "Yes", 1, 0)
-roc_values_rf <- roc(test_data$ChurnLabel, predictions_rf[, 2])
+predictions_rf <- predict(final_rf, val_data, type = "prob")
+binary_target <- ifelse(val_data$ChurnLabel == "Yes", 1, 0)
+roc_values_rf <- roc(val_data$ChurnLabel, predictions_rf[, 2])
 plot(roc_values_rf, main = "ROC Curve for Random Forest Model")
 lines(roc_values_rf, col = "blue")
 
@@ -626,9 +626,9 @@ print(paste("AUC:", auc_result_rf))
 
 ```{r}
 #ROC curve of logistic regression
-predictions_lr <- predict(finalLR, test_data, type="resp")
-binary_target <- ifelse(test_data$ChurnLabel == "Yes", 1, 0)
-roc_values_lr <- roc(test_data$ChurnLabel, predictions_lr)
+predictions_lr <- predict(finalLR, val_data, type="resp")
+binary_target <- ifelse(val_data$ChurnLabel == "Yes", 1, 0)
+roc_values_lr <- roc(val_data$ChurnLabel, predictions_lr)
 plot(roc_values_lr, main = "ROC Curve for Logistic Regression Model")
 lines(roc_values_lr, col = "red")
 
