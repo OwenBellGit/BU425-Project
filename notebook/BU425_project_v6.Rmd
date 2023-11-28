@@ -595,8 +595,9 @@ rfResults <- getMetrics(getClass(finalRF, "rf", val_data, rf_cutoff), val_data$C
 results <- data.frame(Model = c("Logistic Regression", "Random Forest")) 
 results <- cbind(results, rbind(lrResults, rfResults))
 results 
-
 ```
+
+From the results, we can conclude that our logistic regression model is a more accurate model in comparison to our random forest model. However, the random forest has a much higher specificity score in comparison to the logistic regression model, which means the random forest doesn't predict a customer staying when they end up leaving at the rate of which the logistic regression does. Due to this, depending on the business setting, a model like this would be better in a business sense, depending on the costs associated with each outcome of the model.
 
 ```{r}
 #ROC curve of models
@@ -621,7 +622,7 @@ print(paste0("Testing Error for final random forest is ", getError(getClass(fina
 print(paste0("Validation Error for final random forest is ", getError(getClass(finalRF, "rf", val_data, rf_cutoff), val_data$ChurnLabel)))
 ```
 
-
+After testing both of our final models on the validation dataset, we can see that the error for both models is marginally lower compared to the testing set. Potentially, our validation set data more closely resemble our training set than our testing dataset. However, since the difference is so minor, we can conclude that our models and their respective errors are consistent across multiple datasets.
 
 ## 7. Conclusion 
 
