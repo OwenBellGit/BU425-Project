@@ -1,0 +1,600 @@
+---
+title: "BigDataTeam: RMD File Final"
+author: "Owen Bell, Myisha Chaudhry, Kayleigh Habib, Maheep Jain, Marcus Rilling"
+date: "`r Sys.Date()`"
+output:
+  html_document: 
+    toc: true
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+# import libraries
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(ggcorrplot)
+library(ROSE)
+library(caret)
+library(randomForest)
+library(scales)
+library(rpart)
+library(pROC)
+```
+# Telecom Churn Data
+
+## 1. Introduction
+
+Business Problem: 
+
+Customers from a Telecommunication company are no longer using the company’s services. This proves to be a business problem since the company is losing revenue for every customer that leaves. Aside from lost business, customer churn has a negative impact as it gives the company a bad reputation. This could deter future customers from wanting to use the company’s services/buy the products as they know that their past customers were not satisfied and chose to discontinue the use of services/purchase products. Customers leaving could also be the result of an underlying problem, such as having a bad product or being overpriced. The reason it’s worth looking into this business problem is that there are multiple factors at play that could be hurting a company with a high churn rate.  
+
+Analytic Problem:
+
+The analytical problem in the case of analyzing churn rate would be determining which factors are common between customers that are choosing to discontinue the use of products or services offered by the company. The factors in this analysis can be used to predict whether a customer is likely to leave, which will allow the company the opportunity to take mitigating action.  
+
+Goal: 
+
+The main goal here is to deal with the issue of churn rate as it can have a negative impact on the company in several regards. Machine learning algorithms will be used to predict if certain customers will churn and the ways in which it can be prevented. 
+
+
+## 2. Data Description
+
+We used sample data from IBM for our customer churn case. The dataset contains over 7,000 records and 33 columns and represents customer data from a telecommunication company based in California, USA.
+
+```{r}
+#import data
+initial_data<- read.csv("Telco_customer_churn.csv")
+head(initial_data)
+
+# Look at the makeup of the data
+str(initial_data)
+# 7043 rows and 33 columns 
+# target variable: Churn Label
+```
+
+#### Dealing with Missing Values
+
+One of the first things we need to do is determine the type and quality of the data. We want to ensure that any data fields used in model-building are also available on a consistent basis when the model is deployed. We should also ensure that the data does not include any personal data that could be used to identify individuals. We noticed that there are several columns which do not provide new or useful information for instance, all customers in this data reside in California, so columns for State and Country provide no value. Next, we would look for any missing values, and determine whether these records should be dropped, or if values can be imputed from existing information.  
+
+```{r}
+# check for missing values
+colSums(is.na(initial_data))
+#can see that total charges has 11 observations missing
+```
+
+```{r}
+# shows the rows in which total charges is NA
+missing_val<- initial_data[is.na(initial_data$Total.Charges),]
+missing_val
+# these missing values are when churn = 0 so they are staying with the company
+```
+
+```{r}
+# dropping the NA values, would not contribute much in our findings as we have about 73% of the data that is not churn (churn = 0)
+data<- na.omit(initial_data)
+colSums(is.na(data))
+```
+
+```{r}
+# removing columns that are not providing useful information
+data<- data %>% dplyr::select(-c(State, Country))
+```
+
+```{r}
+# count the target variable
+data %>%
+  group_by(Churn.Label) %>%
+  summarise(count = n(), 
+            percentage = paste0(round(count/nrow(initial_data)*100,0),"%"),
+            .groups="drop")
+```
+
+The target variable found in the “Churn Label” column indicates whether or not a customer stays or leaves the company. On reviewing the data, we noticed that the dataset is imbalanced with about 73% staying with the company compared to 27% who leave. We will have to take this into account when doing our analysis.  
+
+
+## 3. Exploratory Data Analysis
+
+There are several different data fields that are available. We have done some preliminary exploratory data analysis, to see how these fields relate to the target, and whether there are any variable correlations. For all customers we have information on characteristics such as gender, whether they have a partner or any dependents, and how long they have been with the company. We also have information about the different types of services that the company provides such as phone, internet, streaming or a combination of these.   
+
+```{r}
+# distribution of target variable 
+data %>% 
+  ggplot(aes(x = Churn.Label, fill = Churn.Label))+
+  geom_bar(aes(y = after_stat(count)/sum(after_stat(count))))+
+  ylab("Proportion")+
+  xlab("Churn Value")+
+  ggtitle("Distribution of Churn Rate")+
+  theme(plot.title = element_text(hjust = 0.5))+ # centers the title
+  scale_fill_brewer(palette = "Set2")
+```
+
+```{r, fig.width=12, fig.height=12}
+categFields <- c("Gender", "Senior.Citizen", "Contract", "Internet.Service", "Payment.Method")
+
+p<- list()
+for (i in 1:length(categFields)){
+  tab <- data %>% 
+  group_by(!!sym(categFields[[i]]), Churn.Label) %>% 
+  summarise(count = n(),
+            .groups = "drop")  %>% 
+  mutate(prop = paste0(round(count/sum(count)*100, 0), '%'))
+  p[[i]] <- ggplot(data=tab, aes(x = !!sym(categFields[[i]]), y = count, fill = Churn.Label)) +
+  geom_col(position = "stack")  +
+  geom_text(aes(label = prop), vjust = 1, size = 3) +
+  ggtitle(paste0("Counts of Churn Rate by ", categFields[i]))+
+  theme(plot.title = element_text(hjust = 0.5))+ # centers the title
+  scale_fill_brewer(palette = "Set2")
+}
+
+library(gridExtra)
+
+do.call(grid.arrange, p)
+```
+The graph on the top left shows there are similar numbers of customers by gender, with each having similar proportions that leave versus remaining with the company. The graph on the top right shows that majority of customers are not senior citizens, but those that are, have a higher likelihood to leave. The next distribution shows that there are more people leaving the company with a contract that is month-to month versus those that are fixed for one or two years. This makes sense because customers with longer term contracts might face penalties if they terminate early. The fourth graph shows that most customers have Fibre Optic internet services, but this category also has the largest proportion of customers that leave the company. The last graph shows the majority of customers choose to pay by electronic cheque. However, this also leads to higher likelihood of customer loss. 
+
+
+Customers who have been with the company for a shorter period of time are more likely to leave, with a median of 10 months.
+```{r}
+# plots for continuous variables
+data %>%
+  ggplot(aes(x = Tenure.Months, fill = Churn.Label))+
+  geom_histogram(bins = 30)+
+  ggtitle("Distribution of Tenure by Churn Label")+
+  theme(plot.title = element_text(hjust = 0.5))+ # centers the title
+  scale_fill_brewer(palette = "Set2")+
+  xlab("Tenure Months")
+```
+
+Although there are more outliers, it appears that customers who left the company had a lower median total charge than those who remained with the company. This may indicate that cost alone may not be the motivating factor that causes customers to leave.
+```{r}
+data %>%
+  ggplot(aes(x = Total.Charges, y = Churn.Label, fill = Churn.Label))+
+  geom_boxplot()+
+  ggtitle("Distribution of Total Charges by Churn Label")+
+  theme(plot.title = element_text(hjust = 0.5))+ # centers the title
+  scale_fill_brewer(palette = "Set2")
+
+```
+
+For customers who have left, the data also includes a reason for leaving. While this cannot be used in prediction this can be helpful in determining what incentives or mitigating actions could be taken by the company to promote customer retention. About 10% of the customers who left, did so due to price or charges.
+
+```{r}
+# reason for leaving
+data %>% 
+  filter(Churn.Value == 1) %>% 
+  group_by(Churn.Reason) %>% 
+  summarise(count = n(),
+           .groups = 'drop') %>% 
+  mutate(perc =paste0(round(count / sum(count)*100, 0),'%')) %>% 
+  arrange(desc(count))
+```
+
+
+#### Feature Engineering
+The zipCode field contains a high number of unique values, which can be problematic for a categorical variable. To reduce dimensionality of this field, we grouped the values into a new feature, "Region".
+
+```{r}
+#Create a location variable from first 3 digits of zip code
+#California can be divided into North and South
+#Zip codes < 935** considered South, else considered North
+
+data <- data %>% 
+  mutate(Region = if_else(Zip.Code <= 93500, "South", "North"))
+       
+```
+
+After doing some exploratory data analysis we realized some columns were not providing us additional information. In  addition, we converted the categorical variables to factors and assigned the appropriate levels. Finally, we scaled the continuous variables which will help with performance of the predictive models.
+
+```{r}
+# need to drop specific columns 
+# (do we need both churn value and churn label), lat long (we have the latitude and longitude separated)
+data<- data %>% 
+  dplyr::select(c(Gender: Total.Charges, Region, Churn.Label))
+head(data)
+
+# data that won't be available for why they left (can't use for prediction) 
+```
+
+```{r}
+# rename the columns
+names(data) <- c("Gender", "Senior",
+                    "Partner", "Dependents",
+                    "Tenure","PhoneSvc",
+                    "MultLines","InternetSvc",
+                    "OLSecurity","OLBackup",
+                    "DeviceProt","TechSupport",
+                    "StreamTV","StreamMovies",
+                    "Contract", "Paperless",
+                    "PayMethod", "MonthlyCharges",
+                    "TotalCharges","Region", "ChurnLabel")
+
+head(data)
+```
+
+
+
+```{r}
+#Convert character fields to categorical variables
+data <- data %>% 
+  mutate(MultLines = if_else(PhoneSvc=="No", "No", MultLines),
+         OLSecurity = if_else(InternetSvc=="No", "No", OLSecurity),
+         OLBackup = if_else(InternetSvc=="No", "No", OLBackup),
+         DeviceProt = if_else(InternetSvc=="No", "No", DeviceProt),
+         TechSupport = if_else(InternetSvc=="No", "No", TechSupport),
+         StreamTV = if_else(InternetSvc=="No", "No", StreamTV),
+         StreamMovies = if_else(InternetSvc=="No", "No", StreamMovies))
+
+#Convert character fields to categorical variables
+#Set reference level for target variable
+data <- data %>% 
+  mutate_if(~is.character(.),as.factor) %>% 
+  mutate(ChurnLabel = relevel(ChurnLabel, ref = "No"))
+# looking at which variable is our indicator (1: customer is leaving)
+contrasts(data$ChurnLabel)
+str(data)
+```
+
+
+```{r}
+#Scale continuous vars
+data_S <- data %>% 
+  mutate_if(~is.numeric(.),rescale)
+```
+
+To test for collinearity among variables, we produced a heatmap. Based on this we noted some relationships among variables, but none that were highly correlated.
+
+```{r, fig.width=14, fig.height=14}
+#heatmap
+model.matrix(~0+.,data_S) %>% 
+  cor(use="pairwise.complete.obs") %>% 
+  ggcorrplot(show.diag=FALSE, type="lower",lab=TRUE, lab_size=5)+
+  ggtitle("Correlation plot for Data")
+```
+
+## 4. Split the data into train, test and validation sets
+
+We need to split our data into training, test, and validation sets. Using and 80/10/10 ratio of available data with 80% of the being used for the training data and the remaining being used for the test and validation data. The training data will be what we use to develop and build the model, while the test data will be used for evaluating the model and doing any hyper tuning (to choose the best parameters), and the validation data will evaluate and compare the final models. 
+
+One consideration we must make is the fact that the data we are working is skewed about 70/30 to customer staying versus leaving as mentioned previously. We will need to modify how we build the models to make sure they still accurately reflect the general environment. If we do not do this, we run the risk of either training data being skewed, leading to a highly inaccurate model, or the test set being skewed leading to inaccurate conclusions we can draw from our models.
+
+
+
+```{r}
+#creating train and test splits
+set.seed(0)
+splitSample <- sample(1:3, size=nrow(data_S), prob=c(0.8,0.1,0.1), replace=TRUE)
+
+train_data <- data_S[splitSample==1, ] 
+test_data <- data_S[splitSample==2, ] 
+val_data <- data_S[splitSample==3, ]
+
+#check dimensions of train and test
+dim(train_data)
+dim(test_data)
+dim(val_data)
+```
+
+
+```{r}
+#check proportion + incidence of target in each set
+table(train_data$ChurnLabel)
+table(test_data$ChurnLabel)
+table(val_data$ChurnLabel)
+
+```
+
+
+As our data was imbalanced in favour, we used an oversampling technique to help balance the dataset. This was applied to the training data only.
+```{r}
+# Oversample on the train only
+oversampleTrain<- ovun.sample(ChurnLabel ~ ., data = train_data, method = "over", seed = 0)$data 
+
+#checking distribution of target variable
+table(oversampleTrain$ChurnLabel)
+table(train_data$ChurnLabel)
+
+```
+
+
+## 5. Build the models
+Due to the nature of Churn being one of two options either a customer stays or leaves we decided it fits best to use a classification models. These models will be used to predict the likelihood that a customer will leave (class 1) or staying (class 0).
+
+#### Confusion Matrix and Other Metrics
+Due to of our models being classification models we plan to use the confusion matrix as our main source of evaluation. The columns being the actual values of what we are trying to predict and the rows being our predictions. This gives us four values: True Positive - TP (We predict the customer leaves, and they do), False Positive - FP (We predict they leave, and they do not), True Negative - TN (We predict they stay, and they do), and finally False Negative - FN (We predict they stay, but they leave). With these four values we gain a lot of information about our different models, and they offer us many statistics we can use, most importantly the model’s accuracy. Another benefit of the confusion matrix is it offers us the ability to better fine tune our models to better suit the company’s needs.
+
+```{r}
+#Functions to be used in model evaluation
+
+#Get class predictions based on specified threshold
+getClass <- function(model, tool, data, cutoff=0.5){
+  if (tool =="lr"){
+    preds <- predict(model, data, type = "response")
+    preds <-ifelse(preds > cutoff,"Yes","No")
+    preds <- as.factor(preds)
+  }
+  else {
+    preds <- data.frame(predict(model, newdata = data, type="prob"))$Yes
+    preds <-ifelse(preds > cutoff,"Yes","No")
+    preds <- as.factor(preds)
+  }
+}
+
+#Get probability predictions
+getProbs <- function(model, tool, data){
+  if (tool =="lr"){
+    preds <- predict(model, data, type = "response")
+  }
+  else {
+    preds <- data.frame(predict(model, newdata = data, type="prob"))$Yes
+  }
+}
+
+# gets the error values
+getError <- function(preds, target){
+  error = mean(target != preds)
+  return(error)
+}
+
+# prints out the confusion matrix
+getCM <- function(preds, data){
+  cm <- confusionMatrix(preds, data, positive="Yes")
+  print(cm)
+} 
+  
+ # prints specific metrics we want displayed 
+getMetrics <- function(preds, data){
+  cm <- confusionMatrix(preds, data, positive="Yes")
+  accuracy <- cm$overall[1]
+  precision <- cm$byClass[5]
+  sensitivity <- cm$byClass[1]
+  specificity <- cm$byClass[2]
+  f1Score <- 2*(precision*sensitivity)/(precision+sensitivity)
+  results <- tibble("Accuracy"=accuracy,
+               "Precision"=precision,
+               "Sensitivity"=sensitivity,
+               "Specificity"=specificity,
+               "F1Score"=f1Score)
+  return(results)
+  
+}
+```
+
+```{r}
+#Used in setting parameters for caret model building
+trainControl <- trainControl(method = "repeatedcv",
+                             number = 5,
+                             repeats = 3,
+                             summaryFunction = twoClassSummary,
+                             classProbs = T)
+```
+
+
+### Logistic Regression
+
+Logistic Regression was chosen due to its high interpretability and simplicity. Using the predictors, the model will produce a probability between 0 and 1 and from there we can determine if the customer is closer to leaving (1) or staying (0). It is a model that we all have experience with and feel comfortable with using and explaining the results to management and other stakeholders of the telecom company. The model is easy to improve on through regularization techniques such as Lasso and Ridge as well as StepAIC. 
+```{r}
+#build Logistic Regression
+modelLR <- glm(ChurnLabel ~. ,data = oversampleTrain, family = "binomial")
+summary(modelLR)
+```
+
+
+#### Metrics for Logistic Regression
+
+```{r}
+# Get train and test errors for logistic regression
+sprintf("Training Error for Logistic Regression: %f",getError(getClass(modelLR, "lr", oversampleTrain,0.5), oversampleTrain$ChurnLabel))
+sprintf("Testing Error for Logistic Regression: %f",getError(getClass(modelLR, "lr", test_data,0.5), test_data$ChurnLabel))
+```
+
+Training error and testing error are similar, indicating that the model is likely not overfitting. Using Logistic Regression we are able to predict customer churn at a 76% accuracy and a sensitivity of about 80%. However, there are some features that appear to be not significant as predictors, so we could refine the logistic regression using regularization techniques.
+
+
+```{r}
+# Get metrics for logistic regression based on test data
+getCM(getClass(modelLR, "lr", test_data, 0.5), test_data$ChurnLabel)
+print(getMetrics(getClass(modelLR, "lr", test_data, 0.5), test_data$ChurnLabel))
+```
+
+#### Hypertuning the Logistic Regression
+
+Using cross validation for Lasso and Ridge Regression
+```{r}
+# trying to tune our model to see if we can improve performance
+# alpha = 0 lasso ; alpha = 1 ridge
+set.seed(0)
+tuneGridReg =expand.grid(alpha = c(0,1),
+                         lambda=seq(0.1,3, by = 0.1))
+
+modelReg <- train(ChurnLabel ~ ., data = oversampleTrain,
+                  method = "glmnet",
+                  trControl = trainControl,
+                  tuneGrid = tuneGridReg,
+                  metric = "ROC",
+                  family="binomial",
+                  savePredictions = "all")
+modelReg
+```
+
+```{r}
+#get Metrics for regularized logistic regression using test data
+getMetrics(getClass(modelReg, "reg", test_data, 0.5), test_data$ChurnLabel)
+```
+
+The regularization indicates that there is slightly higher accuracy, but lower sensitivity. This means that the regularized model is not as capable of identifying the customers that will leave the company, so it is less useful than the full glm. 
+
+Looking at the output for the full model, there are some features which appear to be insignificant in the model. Removing some of these will help reduce complexity. We will use stepwise AIC to try reducing predictors in the logistic regression model.
+
+```{r}
+# Reduce model complexity by applying stepwise logistic regression
+set.seed(0)
+modelRed <- train(ChurnLabel ~ ., data = oversampleTrain,
+                  method = "glmStepAIC",
+                  trControl = trainControl,
+                  direction ="backward",
+                  metric = "ROC",
+                  family="binomial", trace=F)
+
+modelRed$finalModel
+```
+
+
+#### Important Variables for Logistic Regression
+
+```{r}
+#plot the Variable Importance
+ggplot(varImp(modelRed$finalModel), aes(x=reorder(rownames(varImp(modelRed$finalModel)),Overall), y=Overall)) +
+geom_point( color="blue", size=4, alpha=0.6)+
+xlab('Variable')+
+ylab('Overall Importance')+ggtitle("Variable Importance for Logistic Regression")+
+coord_flip() 
+```
+
+#### Final Logistic Regression Model
+
+```{r}
+# using the reduced number of predictors from AIC
+finalLR <- glm(ChurnLabel ~ Senior + Partner + Dependents + Tenure + 
+                 MultLines + InternetSvc + OLSecurity + TechSupport + StreamTV + StreamMovies + 
+                 Contract + Paperless + PayMethod + MonthlyCharges + TotalCharges, 
+               family = "binomial", data = oversampleTrain)
+
+summary(finalLR)
+```
+
+
+```{r}
+#Eval of the model
+print(paste0("Training Error for final logistic regression is ", getError(getClass(finalLR, "lr", oversampleTrain, 0.5), oversampleTrain$ChurnLabel)))
+print(paste0("Testing Error for final logistic regression is ", getError(getClass(finalLR, "lr", test_data, 0.5), test_data$ChurnLabel)))
+```
+
+```{r}
+#get ROC with test data and optimal threshold for rf
+roc_score_lr <- roc(test_data$ChurnLabel, getProbs(finalLR, "lr", test_data))
+lr_cutoff<- coords(roc_score_lr, "best", ret="threshold")[[1]]
+
+getCM(getClass(finalLR, "lr", test_data, lr_cutoff), test_data$ChurnLabel)
+print(getMetrics(getClass(finalLR, "lr", test_data, lr_cutoff), test_data$ChurnLabel))
+```
+
+The logistic regression after using step-wise feature selection produces similar results to the full model. However, it is less complex due to fewer features used and is easier to communicate to management. Therefore we will use this model.
+
+### Random Forest
+Random Forest is more complicated but produces accurate results especially on imbalanced datasets. The model will tell us if a customer decides to leave or stay based on aggregating predictions from multiple decision trees. The model also does an excellent job of reducing variance and can be scaled easily for future projects.  
+```{r}
+# build Random Forest
+tunegrid_rf <- expand.grid(mtry = seq(3,9,by=2))
+```
+
+```{r}
+# build Random Forest
+# TAKES A WHILE TO RUN
+for(i in c(500, 1000)){
+  set.seed=0
+  modelRF <- train(ChurnLabel~. ,
+                   data = oversampleTrain,
+                   method = "rf",
+                   trControl = trainControl,
+                   ntrees = i,
+                   metric = "ROC",
+                   tuneGrid = tunegrid_rf)
+
+  print(modelRF)
+}
+```
+
+The highest ROC occurs when mtry=9, so we will fit a random forest model using these values.
+
+#### Hypertuning the Random Forest
+
+```{r}
+# Final rf model trained on all train data
+#1000 and 9
+set.seed(0)
+finalRF <- randomForest(ChurnLabel ~., data = oversampleTrain, mtry = 9, ntree = 1000, nodesize = 30)
+print(finalRF)
+```
+
+#### Important Variables for Random Forest
+```{r}
+varImpPlot(finalRF)
+```
+
+
+#### Confusion Matrix and Other Metrics for the Random Forest Model
+
+```{r}
+# class predictions with test data
+#get ROC with test data and optimal threshold for rf
+roc_score_rf <- roc(test_data$ChurnLabel, as.data.frame(predict(finalRF, test_data, type="prob"))$Yes)
+rf_cutoff <- coords(roc_score_rf, "best", ret="threshold")[[1]]
+
+getCM(getClass(finalRF, "rf",test_data, rf_cutoff), test_data$ChurnLabel)
+```
+
+
+```{r}
+print(paste0("Testing Error for random forest is ", getError(getClass(finalRF, "rf", test_data, rf_cutoff), test_data$ChurnLabel)))
+```
+
+
+
+## 6. Evaluate models
+
+Using the validation dataset we can get the metrics using data that has not been seen. Finally, we can also use an ROC (receiving operating characteristic) curve that provides us with a visual analysis of the model’s results to better compare our different model’s performances.  
+
+```{r}
+# Create confusion matrix to look at values
+
+#Logistic Regression
+lrResults <- getMetrics(getClass(finalLR, "lr", val_data, lr_cutoff), val_data$ChurnLabel)
+
+#Random Forest
+rfResults <- getMetrics(getClass(finalRF, "rf", val_data, rf_cutoff), val_data$ChurnLabel)
+
+#join them together
+results <- data.frame(Model = c("Logistic Regression", "Random Forest")) 
+results <- cbind(results, rbind(lrResults, rfResults))
+results 
+```
+
+From the results, we can conclude that our logistic regression model is a more accurate model in comparison to our random forest model. However, the random forest has a much higher sensitivity score in comparison to the logistic regression model, which means the random forest doesn't predict a customer staying when they end up leaving at the rate of which the logistic regression does. For this business case, a model like this would be better in a business sense, depending on the costs associated with each outcome of the model.
+
+```{r}
+#ROC curve of models
+roc_score_lr <- roc(val_data$ChurnLabel, getProbs(finalLR, "lr",val_data))
+roc_score_rf <- roc(val_data$ChurnLabel, getProbs(finalRF, "rf",val_data))
+
+plot(roc_score_lr, col="red", print.auc=TRUE, print.auc.x =0.15, print.auc.y=0.19,main="Compare ROC for models")
+plot(roc_score_rf, add=TRUE, col="blue", print.auc=TRUE, print.auc.x =0.15, print.auc.y=0.12)
+legend("topright",legend = c("glm","rf"),lty = c(1,1), col = c("red","blue"))
+```
+
+
+```{r}
+# Final test on validation data set
+
+#Logistic Regression
+print(paste0("Testing Error for final logistic regression is ", getError(getClass(finalLR, "lr", test_data, lr_cutoff), test_data$ChurnLabel)))
+print(paste0("Validation Error for final logistic regression is ", getError(getClass(finalLR, "lr", val_data, lr_cutoff), val_data$ChurnLabel)))
+
+#Random Forest
+print(paste0("Testing Error for final random forest is ", getError(getClass(finalRF, "rf", test_data, rf_cutoff), test_data$ChurnLabel)))
+print(paste0("Validation Error for final random forest is ", getError(getClass(finalRF, "rf", val_data, rf_cutoff), val_data$ChurnLabel)))
+```
+
+
+After testing both of our final models on the validation dataset, we can see that the error for both models is marginally lower compared to the testing set. Since the difference is so minor, we can conclude that our models and their respective errors are consistent across multiple datasets.
+
+## 7. Conclusion 
+
+Both models indicate some of the important features in predicting customer churn include the Contract Length, Payment Method, and whether the customer has any Dependents. Using this information, the company can better tailor certain promotions to target these important features to limit customer churn and thus improve their profitability. 
+
+To finalize the results of this analysis it is recommended to use the machine learning models to enhance the telecom company's churn prediction to help in targeting preventative actions. 
